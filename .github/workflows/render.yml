@@ -1,0 +1,37 @@
+# Renders one Short off the laptop, in the PUBLIC repo cricket-render (free minutes). Source of truth is
+# render/render.yml in the private repo; cloud.py copies it here. Footage arrives AES-encrypted as assets of
+# release src-<id> ("/" in a path is "__" in the asset name, ".enc" appended); the result leaves encrypted as
+# artifact <id>. Key: secret RENDER_KEY (local copy state/render.key). Logs are public: never echo the key.
+name: render
+on:
+  workflow_dispatch:
+    inputs:
+      id: {description: "spec id, e.g. 018-guptill-dhoni-runout", required: true}
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - uses: astral-sh/setup-uv@v6
+      - name: tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          npm install --no-audit --no-fund
+      - name: footage
+        env: {GH_TOKEN: "${{ github.token }}", RENDER_KEY: "${{ secrets.RENDER_KEY }}"}
+        run: |
+          mkdir -p dl && gh release download "src-${{ inputs.id }}" -D dl
+          for f in dl/*.enc; do p="${f#dl/}"; p="${p%.enc}"; p="${p//__//}"; mkdir -p "$(dirname "$p")"
+            openssl enc -d -aes-256-cbc -pbkdf2 -pass env:RENDER_KEY -in "$f" -out "$p"; done
+      - name: build
+        run: uv run --no-project --python 3.12 --with edge-tts==7.3.1 --with soundfile --with numpy python build.py "specs/${{ inputs.id }}.json"
+      - name: seal
+        env: {RENDER_KEY: "${{ secrets.RENDER_KEY }}"}
+        run: |
+          d="out/${{ inputs.id }}"
+          tar -C "$d" -cf - "${{ inputs.id }}.mp4" sheet.jpg timing.json props.json | openssl enc -aes-256-cbc -pbkdf2 -pass env:RENDER_KEY -out result.enc
+      - uses: actions/upload-artifact@v4
+        with: {name: "${{ inputs.id }}", path: result.enc, retention-days: 3}

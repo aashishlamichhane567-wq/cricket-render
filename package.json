@@ -1,0 +1,19 @@
+{
+  "name": "cricket-shorts",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@remotion/cli": "4.0.515",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.515"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "remotion studio",
+    "tsc": "tsc"
+  }
+}
