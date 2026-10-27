@@ -396,6 +396,14 @@ def build(path, skip_vo=False, still=None, frames=None):
             # 2 threads: minterpolate at full thread count starved this 3.8 GB laptop and crashed Windows (2026-10-20)
             subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-filter_threads", "1", *cmd, "-frames:v", str(seg["dur"]), *enc,
                             "-threads", "2", str(tmp)], check=True)
+            got = subprocess.run([FFPROBE, "-v", "error", "-count_packets", "-select_streams", "v", "-show_entries", "stream=nb_read_packets",
+                                  "-of", "csv=p=0", str(tmp)], capture_output=True, text=True).stdout.strip()
+            if got != str(seg["dur"]) and "minterpolate" in " ".join(cmd):
+                # the runner's ffmpeg 6.1 silently wrote 0 frames for one minterpolated 005 part (019): plain fps instead
+                print(f"part {i}: {got or 0} of {seg['dur']} frames, re-encoding without minterpolate", flush=True)
+                cmd = [c.replace(c[c.index(",minterpolate"):c.index(",scale=")], ",fps=30") if ",minterpolate" in c else c for c in cmd]
+                subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-filter_threads", "1", *cmd, "-frames:v", str(seg["dur"]), *enc,
+                                "-threads", "2", str(tmp)], check=True)
             tmp.replace(part)
         parts.append(part)
     (out / "parts.txt").write_text("".join(f"file 'cache/{q.name}'\n" for q in parts))
