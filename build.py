@@ -383,9 +383,10 @@ def build(path, skip_vo=False, still=None, frames=None):
         else:
             still_path = HERE / "public" / seg["still"]
             if seg.get("here") and parts:
-                n = segments[i - 1]["dur"] - 1
-                subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(parts[-1]), "-vf", f"select=eq(n\\,{n})", "-fps_mode", "passthrough",
-                                "-frames:v", "1", "-q:v", "2", str(still_path)], check=True)
+                # the part's last frame: -update keeps overwriting, so no frame index to miss (select=eq(n,dur-1)
+                # found nothing on the runner's ffmpeg 6.1 and failed the 019 render)
+                subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(parts[-1]), "-update", "1", "-q:v", "2", str(still_path)],
+                               check=True)
             cmd = ["-loop", "1", "-framerate", "30", "-i", str(still_path), "-vf", f"scale={w}:{h}:flags=lanczos,setsar=1"]
             ident = [cmd, hashlib.sha1(still_path.read_bytes()).hexdigest()]
         key = hashlib.sha1(json.dumps([ident, seg["dur"], enc]).encode()).hexdigest()[:16]
