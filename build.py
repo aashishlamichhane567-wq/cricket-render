@@ -286,7 +286,9 @@ def build(path, skip_vo=False, still=None, frames=None):
         at its NATIVE rate. (Forcing 30 fps here duplicated every 5th frame of 25 fps broadcasts: visible judder.
         The 25->30 conversion happens per segment, by motion interpolation.)"""
         raw = HERE / rel
-        dst = pub / f"src_{Path(rel).stem}_cfr.mp4"
+        # named by the whole path: every clip is sources/<n>/src.mp4, and a stem-only name made all of them share the
+        # first one's cache (019 played 011's footage for 006, and 0 frames for 005 past 011's end)
+        dst = pub / f"src_{Path(rel).with_suffix('').as_posix().replace('/', '_')}_cfr.mp4"
         if not dst.exists() or dst.stat().st_mtime < raw.stat().st_mtime:
             subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(raw), "-fps_mode", "cfr", "-c:v", "libx264", "-preset", "fast", "-crf", "14",
                             "-pix_fmt", "yuv420p", "-g", "10", "-an", str(dst)], check=True)
@@ -398,12 +400,8 @@ def build(path, skip_vo=False, still=None, frames=None):
                             "-threads", "2", str(tmp)], check=True)
             got = subprocess.run([FFPROBE, "-v", "error", "-count_packets", "-select_streams", "v", "-show_entries", "stream=nb_read_packets",
                                   "-of", "csv=p=0", str(tmp)], capture_output=True, text=True).stdout.strip()
-            if got != str(seg["dur"]) and "minterpolate" in " ".join(cmd):
-                # the runner's ffmpeg 6.1 silently wrote 0 frames for one minterpolated 005 part (019): plain fps instead
-                print(f"part {i}: {got or 0} of {seg['dur']} frames, re-encoding without minterpolate", flush=True)
-                cmd = [c.replace(c[c.index(",minterpolate"):c.index(",scale=")], ",fps=30") if ",minterpolate" in c else c for c in cmd]
-                subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-filter_threads", "1", *cmd, "-frames:v", str(seg["dur"]), *enc,
-                                "-threads", "2", str(tmp)], check=True)
+            if got != str(seg["dur"]):  # ffmpeg exits 0 on a seek past the source's end: catch it here, not at the freeze
+                raise SystemExit(f"part {i}: {got or 0} of {seg['dur']} frames from {seg.get('_src', 'a still')} at {seg.get('t')} s")
             tmp.replace(part)
         parts.append(part)
     (out / "parts.txt").write_text("".join(f"file 'cache/{q.name}'\n" for q in parts))
