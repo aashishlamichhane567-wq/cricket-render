@@ -256,7 +256,8 @@ def build(path, skip_vo=False, still=None, frames=None):
     pub.mkdir(parents=True, exist_ok=True)
     wav = pub / "vo.wav"
     tj = out / "timing.json"
-    if not (skip_vo and wav.exists() and tj.exists()):
+    # --skip-vo reuses the voice only if it still speaks this spec's words (series.py and cloud.py rely on it)
+    if not (skip_vo and wav.exists() and tj.exists() and json.loads(tj.read_text())[0] == tokens(spec["vo"])):
         words = voice(spec, wav)
         toks = tokens(spec["vo"])
         times = align(toks, words) if words else timings(spec, wav)[1]

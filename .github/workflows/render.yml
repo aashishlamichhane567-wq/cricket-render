@@ -27,7 +27,7 @@ jobs:
           for f in dl/*.enc; do p="${f#dl/}"; p="${p%.enc}"; p="${p//__//}"; mkdir -p "$(dirname "$p")"
             openssl enc -d -aes-256-cbc -pbkdf2 -pass env:RENDER_KEY -in "$f" -out "$p"; done
       - name: build
-        run: uv run --no-project --python 3.12 --with edge-tts==7.3.1 --with soundfile --with numpy python build.py "specs/${{ inputs.id }}.json"
+        run: uv run --no-project --python 3.12 --with edge-tts==7.3.1 --with soundfile --with numpy python build.py "specs/${{ inputs.id }}.json" --skip-vo
       - name: seal
         env: {RENDER_KEY: "${{ secrets.RENDER_KEY }}"}
         run: |
