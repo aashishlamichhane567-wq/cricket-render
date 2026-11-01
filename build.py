@@ -16,10 +16,12 @@ import difflib
 import gc
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -371,26 +373,8 @@ def build(path, skip_vo=False, still=None, frames=None):
     cache = out / "cache"
     cache.mkdir(exist_ok=True)
     parts = []
-    for i, seg in enumerate(segments):
-        if seg["kind"] == "play":
-            # every segment that isn't already 30 fps at 1x is motion-interpolated to 30 fps: slow motion gets real
-            # in-between frames, and 25 fps broadcasts don't judder. "smooth": false opts out (fast pans, flashes).
-            r = seg["rate"]
-            ramp = isinstance(r, list)
-            needs = ramp or r < 0.99 or abs(fps_of(seg["_src"]) - 30) > 0.01
-            interp = ",minterpolate=fps=30:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1" if needs and seg.get("smooth", True) else ",fps=30"
-            cmd = ["-ss", str(seg["t"]), "-i", seg["_src"], "-vf",
-                   f"setpts={retime(r, seg['dur'] / FPS)}{interp},scale={w}:{h}:flags=lanczos,setsar=1,tpad=stop_mode=clone:stop_duration=10"]
-            ident = [cmd, Path(seg["_src"]).stat().st_mtime]
-        else:
-            still_path = HERE / "public" / seg["still"]
-            if seg.get("here") and parts:
-                # the part's last frame: -update keeps overwriting, so no frame index to miss (select=eq(n,dur-1)
-                # found nothing on the runner's ffmpeg 6.1 and failed the 019 render)
-                subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(parts[-1]), "-update", "1", "-q:v", "2", str(still_path)],
-                               check=True)
-            cmd = ["-loop", "1", "-framerate", "30", "-i", str(still_path), "-vf", f"scale={w}:{h}:flags=lanczos,setsar=1"]
-            ident = [cmd, hashlib.sha1(still_path.read_bytes()).hexdigest()]
+
+    def encode(i, seg, cmd, ident):
         key = hashlib.sha1(json.dumps([ident, seg["dur"], enc]).encode()).hexdigest()[:16]
         part = cache / f"{key}.mp4"
         if not part.exists():  # write-then-rename: a crash mid-encode must not leave a broken part that looks cached
@@ -403,7 +387,35 @@ def build(path, skip_vo=False, still=None, frames=None):
             if got != str(seg["dur"]):  # ffmpeg exits 0 on a seek past the source's end: catch it here, not at the freeze
                 raise SystemExit(f"part {i}: {got or 0} of {seg['dur']} frames from {seg.get('_src', 'a still')} at {seg.get('t')} s")
             tmp.replace(part)
-        parts.append(part)
+        return part
+
+    # Play parts only need their source, so they encode side by side: minterpolate is ~single-threaded, and it was 17 of
+    # the runner's 20 minutes one at a time. The laptop stays at 1 (see the 2-thread note in encode).
+    with ThreadPoolExecutor(1 if WIN else os.cpu_count() or 4) as pool:
+        played = {}
+        for i, seg in enumerate(segments):
+            if seg["kind"] == "play":
+                # every segment that isn't already 30 fps at 1x is motion-interpolated to 30 fps: slow motion gets real
+                # in-between frames, and 25 fps broadcasts don't judder. "smooth": false opts out (fast pans, flashes).
+                r = seg["rate"]
+                needs = isinstance(r, list) or r < 0.99 or abs(fps_of(seg["_src"]) - 30) > 0.01
+                interp = ",minterpolate=fps=30:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1" if needs and seg.get("smooth", True) else ",fps=30"
+                cmd = ["-ss", str(seg["t"]), "-i", seg["_src"], "-vf",
+                       f"setpts={retime(r, seg['dur'] / FPS)}{interp},scale={w}:{h}:flags=lanczos,setsar=1,tpad=stop_mode=clone:stop_duration=10"]
+                played[i] = pool.submit(encode, i, seg, cmd, [cmd, Path(seg["_src"]).stat().st_mtime])
+        played = {i: f.result() for i, f in played.items()}
+    for i, seg in enumerate(segments):
+        if seg["kind"] == "play":
+            parts.append(played[i])
+            continue
+        still_path = HERE / "public" / seg["still"]
+        if seg.get("here") and parts:
+            # the part's last frame: -update keeps overwriting, so no frame index to miss (select=eq(n,dur-1)
+            # found nothing on the runner's ffmpeg 6.1 and failed the 019 render)
+            subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-i", str(parts[-1]), "-update", "1", "-q:v", "2", str(still_path)],
+                           check=True)
+        cmd = ["-loop", "1", "-framerate", "30", "-i", str(still_path), "-vf", f"scale={w}:{h}:flags=lanczos,setsar=1"]
+        parts.append(encode(i, seg, cmd, [cmd, hashlib.sha1(still_path.read_bytes()).hexdigest()]))
     (out / "parts.txt").write_text("".join(f"file 'cache/{q.name}'\n" for q in parts))
     subprocess.run([FFMPEG, "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(out / "parts.txt"), "-c", "copy",
                     str(pub / "base.mp4")], check=True)
