@@ -44,6 +44,7 @@ tokens = lambda text: [t for t in re.findall(r"\S+", text) if re.search(r"[A-Za-
 def align(toks, words):
     """toks: script tokens. words: [(text, start, end)] from Whisper. Returns [(start, end)] per token.
     From psych-channel-renders/generate_vo_kokoro.py: unmatched words are interpolated between neighbours."""
+    words = [w for w in words if w[2] > w[1]]  # Whisper collapses a missed stretch to zero-length words: interpolate those instead
     t = [None] * len(toks)
     sm = difflib.SequenceMatcher(None, [norm(x) for x in toks], [norm(w[0]) for w in words], autojunk=False)
     for blk in sm.get_matching_blocks():
