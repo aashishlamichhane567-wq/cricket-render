@@ -151,7 +151,7 @@ def timings(spec, wav):
     wm = WhisperModel("small", device="cpu", compute_type="int8", local_files_only=True)
     a, sr = sf.read(wav)  # pass samples, not a path: faster-whisper 1.2.1's file decoder breaks on current PyAV
     a = np.interp(np.arange(0, len(a), sr / 16000), np.arange(len(a)), a).astype(np.float32)
-    segs, _ = wm.transcribe(a, language="en", word_timestamps=True, initial_prompt=spec["vo"], vad_filter=False)
+    segs, _ = wm.transcribe(a, language="en", word_timestamps=True, initial_prompt=spec["vo"], vad_filter=False, condition_on_previous_text=False)  # carry-over collapsed a 5 s stretch at the 30 s window (022)
     words = [(w.word, w.start, w.end) for s in segs for w in (s.words or [])]
     toks = tokens(spec["vo"])
     return toks, align(toks, words)
