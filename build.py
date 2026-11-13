@@ -231,6 +231,7 @@ def sfx(music_wav, spec, vo, cue_time):
     v, _ = sf.read(vo)
     speech = v[np.abs(v) > 0.02]
     ref = np.sqrt(np.mean(speech ** 2)) if len(speech) else 0.05
+    vpk = np.percentile(np.abs(v), 99.9)  # the voice's peaks: short UI sounds are set against these ("pk"), not the RMS
     for x in spec["sfx"]:
         f = lib / f"{x['s']}.wav"
         if not f.exists():
@@ -238,7 +239,10 @@ def sfx(music_wav, spec, vo, cue_time):
         pcm = subprocess.run([FFMPEG, "-v", "error", "-i", str(f), "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"],
                              capture_output=True, check=True).stdout
         s = np.frombuffer(pcm, np.float32).astype(np.float64)
-        s = s * ref * 10 ** (x.get("db", -12) / 20) / (np.sqrt(np.mean(s[np.abs(s) > 0.01] ** 2)) + 1e-9)  # level by its audible part
+        if "pk" in x:  # peak vs the voice's peaks (pointing sounds: earshot found RMS-levelled ones masked by the voice)
+            s = s / (np.abs(s).max() + 1e-9) * vpk * 10 ** (x["pk"] / 20)
+        else:
+            s = s * ref * 10 ** (x.get("db", -12) / 20) / (np.sqrt(np.mean(s[np.abs(s) > 0.01] ** 2)) + 1e-9)  # level by its audible part
         if "len" in x:
             s = s[: int(x["len"] * sr)].copy()
             fo = min(len(s), int(0.3 * sr))
