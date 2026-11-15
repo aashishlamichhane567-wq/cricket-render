@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       id: {description: "spec id, e.g. 018-guptill-dhoni-runout", required: true}
+      card: {description: "1 = make voice, timings and spec here from series/<id>.json (cloud.py --card)", required: false, default: ""}
 jobs:
   render:
     runs-on: ubuntu-24.04
@@ -26,12 +27,22 @@ jobs:
           mkdir -p dl && gh release download "src-${{ inputs.id }}" -D dl
           for f in dl/*.enc; do p="${f#dl/}"; p="${p%.enc}"; p="${p//__//}"; mkdir -p "$(dirname "$p")"
             openssl enc -d -aes-256-cbc -pbkdf2 -pass env:RENDER_KEY -in "$f" -out "$p"; done
+      - name: voice
+        if: inputs.card == '1'
+        run: |
+          mkdir -p models specs
+          for f in kokoro-v1.0.int8.onnx voices-v1.0.bin; do
+            curl -sfL --retry 3 -o "models/$f" "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/$f"; done
+          V="uv run --no-project --python 3.12 --with edge-tts==7.3.1 --with kokoro-onnx==0.4.7 --with faster-whisper==1.2.1 --with soundfile --with numpy python"
+          $V -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
+          $V series.py "series/${{ inputs.id }}.json"
       - name: build
         run: uv run --no-project --python 3.12 --with edge-tts==7.3.1 --with soundfile --with numpy python build.py "specs/${{ inputs.id }}.json" --skip-vo
       - name: seal
         env: {RENDER_KEY: "${{ secrets.RENDER_KEY }}"}
         run: |
           d="out/${{ inputs.id }}"
-          tar -C "$d" -cf - "${{ inputs.id }}.mp4" sheet.jpg timing.json props.json | openssl enc -aes-256-cbc -pbkdf2 -pass env:RENDER_KEY -out result.enc
+          cp "specs/${{ inputs.id }}.json" "$d/spec.json" && cp "public/${{ inputs.id }}/vo.wav" "$d/vo.wav"
+          tar -C "$d" -cf - "${{ inputs.id }}.mp4" sheet.jpg timing.json props.json spec.json vo.wav | openssl enc -aes-256-cbc -pbkdf2 -pass env:RENDER_KEY -out result.enc
       - uses: actions/upload-artifact@v4
         with: {name: "${{ inputs.id }}", path: result.enc, retention-days: 3}

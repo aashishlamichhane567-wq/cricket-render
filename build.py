@@ -234,8 +234,10 @@ def sfx(music_wav, spec, vo, cue_time):
     vpk = np.percentile(np.abs(v), 99.9)  # the voice's peaks: short UI sounds are set against these ("pk"), not the RMS
     for x in spec["sfx"]:
         f = lib / f"{x['s']}.wav"
+        if not f.exists():  # sfxmint: WAV went paid (HTTP 402) on 2026-11-14, MP3 stays free (2 a day keyless); ffmpeg reads either
+            f = lib / f"{x['s']}.mp3"
         if not f.exists():
-            subprocess.run(["curl", "-sf", "-m", "60", "-L", "-o", str(f), f"https://sfxmint.com/dl/{x['s']}.wav"], check=True)
+            subprocess.run(["curl", "-sf", "-m", "60", "-L", "-o", str(f), f"https://sfxmint.com/dl/{x['s']}.mp3"], check=True)
         pcm = subprocess.run([FFMPEG, "-v", "error", "-i", str(f), "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"],
                              capture_output=True, check=True).stdout
         s = np.frombuffer(pcm, np.float32).astype(np.float64)
@@ -271,6 +273,11 @@ def build(path, skip_vo=False, still=None, frames=None):
         tj.write_text(json.dumps([toks, times]))
     toks, times = json.loads(tj.read_text())
     vo_len = sf.info(str(wav)).duration
+    # same words is not the same take: a crashed series.py left a slower vo.wav beside the old timings and 028 shipped with
+    # the voice drifting 1.5 s late (2026-11-14). Every good build ends 0.07-0.26 s after its last timed word.
+    if not -0.1 < vo_len - times[-1][1] < 0.6:
+        raise SystemExit(f"{sid}: vo.wav ({vo_len:.2f} s) and timing.json (last word ends {times[-1][1]:.2f} s) are from "
+                         "different takes: rerun series.py so the voice and its timings are made together")
     total = round((vo_len + spec.get("tail", 0.25)) * FPS)  # ends just after the last word, so it loops
     keys = [norm(t) for t in toks]
 
