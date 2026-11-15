@@ -185,8 +185,8 @@ export const ClipShort: React.FC<Props> = (p) => {
       const col = (b.color as string) ?? "#fff";
       svg.push(
         <g key={k} opacity={alpha}>
-          <ellipse cx={c[0]} cy={c[1]} rx={rx} ry={ry} fill="none" stroke={col} strokeOpacity={0.3} strokeWidth={14} vectorEffect="non-scaling-stroke" pathLength={1} strokeDasharray="1" strokeDashoffset={1 - born} style={{ filter: "blur(3px)" }} />
-          <ellipse cx={c[0]} cy={c[1]} rx={rx} ry={ry} fill="none" stroke={col} strokeWidth={5} vectorEffect="non-scaling-stroke" strokeLinecap="round" pathLength={1} strokeDasharray="1" strokeDashoffset={1 - born} />
+          <ellipse cx={c[0]} cy={c[1]} rx={rx} ry={ry} fill="none" stroke={col} strokeOpacity={0.3} strokeWidth={20} vectorEffect="non-scaling-stroke" pathLength={1} strokeDasharray="1" strokeDashoffset={1 - born} style={{ filter: "blur(3px)" }} />
+          <ellipse cx={c[0]} cy={c[1]} rx={rx} ry={ry} fill="none" stroke={col} strokeWidth={9} vectorEffect="non-scaling-stroke" strokeLinecap="round" pathLength={1} strokeDasharray="1" strokeDashoffset={1 - born} />
         </g>,
       );
     }
@@ -199,7 +199,26 @@ export const ClipShort: React.FC<Props> = (p) => {
         </div>,
       );
     }
-    if (b.do === "arrow") {
+    if (b.do === "arrow" && !b.dashed && !b.nohead) {
+      // pointer arrow, as in the explainer Shorts that perform (Textuju, 2026-11-15 frame study): a chunky solid red block
+      // arrow with a white outline that pops in with an overshoot and nudges toward what it points at. Tip sits on `to`.
+      const a0 = X(pointAt(b.from, t));
+      const z0 = X(pointAt(b.to, t));
+      const d0 = Math.hypot(z0[0] - a0[0], z0[1] - a0[1]) || 1;
+      const ux = (z0[0] - a0[0]) / d0, uy = (z0[1] - a0[1]) / d0;
+      const g = b.f === 0 ? 1 : clamp01((frame - b.f) / ((b.dur as number) ?? 9));
+      const sc = g >= 1 ? 1 : 0.3 + 0.7 * easeOut(g) + 0.16 * Math.sin(Math.PI * g); // overshoots, then settles
+      const nudge = (g >= 1 ? 7 * (0.5 - 0.5 * Math.cos((frame - b.f) / 3.2)) : 0) / s;
+      const L = Math.max(d0, 120 / s) * sc, hl = (50 / s) * sc, hw = (38 / s) * sc, sw = (17 / s) * sc; // length, head length, head and shaft half-widths
+      const tip = [z0[0] - ux * nudge, z0[1] - uy * nudge];
+      const at = (along: number, side: number) => [tip[0] - ux * along - uy * side, tip[1] - uy * along + ux * side].join(",");
+      const shape = [at(0, 0), at(hl, hw), at(hl, sw), at(L, sw), at(L, -sw), at(hl, -sw), at(hl, -hw)].join(" ");
+      svg.push(
+        <g key={k} opacity={alpha} style={{ filter: "drop-shadow(0 3px 4px rgba(0,0,0,0.55))" }}>
+          <polygon points={shape} fill={(b.color as string) ?? RED} stroke="#fff" strokeWidth={5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        </g>,
+      );
+    } else if (b.do === "arrow") {
       const a = X(pointAt(b.from, t));
       const z = X(pointAt(b.to, t));
       const bend = ((b.bend as number) ?? 0) * p.srcH;
