@@ -21,3 +21,12 @@ So circle and arrow share one chime, as the reference does. sfxmint WAV now need
 2026-11-14 audit: ui-pop is pop/2 again. pro_pop_in/round (028) has 99% of its energy below 300 Hz, so phones cannot play it;
 it was picked by `earshot compare`, which is not a reliable match (knowledge/voice.md F.1). ui-arrow = the ui-ring ding.
 A riser + sub hit were added and removed the same day: they came from misread footymemology labels.
+
+2026-11-15 KIT A, CHOSEN BY THE OWNER BY EAR (he disliked the dings; picked A from a 4-way comparison on 029: A clicks / B soft pops /
+C wood / D none). This is the live set; the table at the top is history.
+| file | earshot id | used for | level |
+|---|---|---|---|
+| ui-ring.wav | pro_click/mouse (13 ms click, 1.1 kHz) | a circle drawing on | pk 0 |
+| ui-pop.wav | pop/1 (38 ms bright pop, 1.3 kHz) | a label appearing | pk -2 |
+| ui-arrow.wav | swish/bright (0.2 s, 2.4 kHz) | the red pointer arrow popping in | pk -3 |
+All have 100% of their energy above 300 Hz (phone-audible). Do not swap sounds again without a by-ear comparison for the owner.

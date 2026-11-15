@@ -134,12 +134,12 @@ def moment(m, t0, t1, color, hit_at=None):
     if "on" in m:
         sfx.append({"s": "ui-ring", "pk": 0, "at": round(hit_t + (0.12 if sfx else 0.03), 3)})
         if "label" in m:
-            sfx.append({"s": "ui-pop", "pk": 0, "at": round(hit_t + 0.3, 3)})
+            sfx.append({"s": "ui-pop", "pk": -2, "at": round(hit_t + 0.3, 3)})
     if "arrow" in m and hold >= 0.8:  # [[x, y] from, [x, y] to] on the hit frame, optional "bend"; needs room after the label
         a = round(hit_t + 0.55, 3)
         beats.append({"at": a, "do": "arrow", "lead": 0, "from": m["arrow"][0], "to": m["arrow"][1], "bend": m.get("bend", 0.04),
                       "dur": 0.3, "until": round(hit_t + hold, 3)})  # seconds (build.py multiplies by FPS): 9 here meant a 9 s draw, a stub on 028 and 029
-        sfx.append({"s": "ui-arrow", "pk": 0, "at": a})
+        sfx.append({"s": "ui-arrow", "pk": -3, "at": a})
     return tl, beats, sfx, hit_t
 
 
